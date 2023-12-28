@@ -279,8 +279,10 @@ namespace SQLinq.Compiler
                 switch (method.Name.ToLower())
                 {
                     case "newguid":
-                        parameters.Add(parameterName, Guid.NewGuid());
-                        return string.Format("{0}{1}", memberName, parameterName);
+                    {
+                        var guid = Guid.NewGuid();
+                        return string.Format("{0}{1}", memberName, guid);
+                    }
 
                     default:
                         throw new Exception("Unsupported Method Name (" + method.Name + ") on Guid object");
@@ -303,15 +305,15 @@ namespace SQLinq.Compiler
                 switch (method.Name.ToLower())
                 {
                     case "startswith":
-                        parameters[parameterName] = parameters[parameterName].ToString() + "%";
+                        parameterName = parameterName.ToString() + "%";
                         return string.Format("{0} LIKE {1}", memberName, parameterName);
 
                     case "endswith":
-                        parameters[parameterName] = "%" + parameters[parameterName].ToString();
+                        parameterName = "%" + parameterName.ToString();
                         return string.Format("{0} LIKE {1}", memberName, parameterName);
 
                     case "contains":
-                        parameters[parameterName] = "%" + parameters[parameterName].ToString() + "%";
+                        parameterName = "%" + parameterName.ToString() + "%";
                         return string.Format("{0} LIKE {1}", memberName, parameterName);
 
                     case "toupper":
@@ -629,9 +631,7 @@ namespace SQLinq.Compiler
 
                 if (val != null)
                 {
-                    var id = getParameterName();
-                    parameters.Add(id, dialect.ConvertParameterValue(val));
-                    return id;
+                    return (string) dialect.ConvertParameterValue(val);
                 }
                 
             }
@@ -683,15 +683,22 @@ namespace SQLinq.Compiler
                 }
                 else
                 {
-                    var id = getParameterName();
-                    parameters.Add(id, dialect.ConvertParameterValue(val));
-                    return id;
+                    return (string)dialect.ConvertParameterValue(val);
                 }
             }
             else if (ce.NodeType == ExpressionType.MemberAccess)
             {
-                var val = GetMemberAccessValue(rootExpression, e);
+                var val = GetValue(e);
 
+                if (val == null)
+                {
+                    val = GetMemberAccessValue(rootExpression, e);
+                }
+                else
+                {
+                    return (val.ToString());
+                }
+ 
                 if (val == null)
                 {
                     return _NULL;
@@ -702,12 +709,49 @@ namespace SQLinq.Compiler
                 }
                 else
                 {
-                    var id = getParameterName();
-                    parameters.Add(id, dialect.ConvertParameterValue(val));
-                    return id;
+                    return (string)dialect.ConvertParameterValue(val);
                 }
             }
             return null;
+        }
+
+        public static object GetValue (Expression e)
+        {
+            object value = null;
+            var    de = (dynamic)e;
+            var    ce = (e is ConstantExpression) ? e : de.Expression;
+
+            MemberInfo instance = ((dynamic)ce).Member;
+            MemberInfo member   = ((dynamic)e).Member;
+
+            Expression instanceExpression = ((dynamic)ce).Expression;
+
+            if (instanceExpression is ConstantExpression expression)
+            {
+                var t         = expression.Type;
+                var fieldName = instance.Name;
+
+                var fieldInfo = t.GetField(fieldName) ?? t.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+                if (fieldInfo != null)
+                { 
+                    value = (fieldInfo.GetValue(expression.Value));
+                }
+                else
+                {
+                    PropertyInfo propInfo = t.GetProperty(fieldName) ?? t.GetProperty(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (propInfo != null)
+                    {
+                        value = (propInfo.GetValue(expression.Value, null));
+                    }
+                }
+
+                if (value != null)
+                {
+                    value = GetValue(member, value);
+                }
+            }
+
+            return (value);
         }
 
         static object GetMemberAccessValue(Expression rootExpression, Expression e)
@@ -725,18 +769,21 @@ namespace SQLinq.Compiler
             }
             else if (e.NodeType == ExpressionType.MemberAccess)
             {
-                var val = GetMemberAccessValue(rootExpression, de.Expression);
+                object value;
+                var    val = GetMemberAccessValue(rootExpression, de.Expression);
                 if (val == null) return null;
 
                 if (de.Member is PropertyInfo)
                 {
                     var memberPropInfo = de.Member as PropertyInfo;
-                    return memberPropInfo.GetValue(val, null);
+                    value = memberPropInfo.GetValue(val, null);
+                    return (value);
                 }
                 else if (de.Member is FieldInfo)
                 {
                     var memberFieldInfo = de.Member as FieldInfo;
-                    return memberFieldInfo.GetValue(val);
+                    value = memberFieldInfo.GetValue(val);
+                    return (value);
                 }
                 else
                 {
@@ -745,6 +792,50 @@ namespace SQLinq.Compiler
             }
 
             throw new NotSupportedException("SQExpressionCompiler.GetMemberAccessValue: Expression Not Supported");
+        }
+
+        public static object GetValue(MemberInfo member, object instance)
+        {
+            if (member is FieldInfo fieldInfo)
+            {
+                return fieldInfo.GetValue(instance);
+            }
+
+            if (member is PropertyInfo propertyInfo)
+            {
+                return propertyInfo.GetValue(instance, null);
+            }
+
+            return (null);
+        }
+
+
+        private string GetValue(object input)
+        {
+            var type = input.GetType();
+            //if it is not simple value
+            if (type.IsClass && type != typeof(string))
+            {
+                var fieldName = input.ToString();
+
+                var fields    = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+                var fieldInfo = fields.FirstOrDefault(field => field.Name == fieldName);
+                //proper order of selected names provided by means of Stack structure
+                //var fieldInfo = type.GetField(fieldName);
+                object value;
+                if (fieldInfo != null)
+                    //get instance of order    
+                    value = fieldInfo.GetValue(input);
+                else
+                    //get value of "Customer" property on order
+                    value = type.GetProperty(fieldName).GetValue(input, null);
+                return GetValue(value);
+            }
+            else
+            {
+                 //rest types
+                return input.ToString();
+            }
         }
 
         #endregion

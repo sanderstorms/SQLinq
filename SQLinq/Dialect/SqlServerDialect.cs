@@ -34,7 +34,7 @@ namespace SQLinq
         {
             if (!tableName.StartsWith("["))
             {
-                return string.Format("[{0}]", tableName);
+                //return string.Format("[{0}]", tableName);
             }
 
             return tableName;
@@ -44,7 +44,7 @@ namespace SQLinq
         {
             if (!columnName.StartsWith("[") && !columnName.Contains("."))
             {
-                return string.Format("[{0}]", columnName);
+                //return string.Format("[{0}]", columnName);
             }
 
             return columnName;  
