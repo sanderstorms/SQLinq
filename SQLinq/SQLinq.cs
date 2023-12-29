@@ -13,6 +13,35 @@ namespace SQLinq
 {
     public static class SQLinq
     {
+        public static string GetTableName(Type type)
+        {
+            var tableName      = type.Name;
+            var tableAttribute = type.GetCustomAttributes(typeof(SQLinqTableAttribute), false).FirstOrDefault() as SQLinqTableAttribute;
+            if (tableAttribute != null)
+            {
+                // Table / View name is explicitly set, use that instead
+                tableName = tableAttribute.Table;
+            }
+            else
+            {
+                var attributes = type.GetCustomAttributes(false);
+                foreach (var attr in attributes)
+                {
+                    var fields = attr.GetType().GetProperties();
+                    foreach (var field in fields)
+                    {
+                        if (field.Name.Equals("name", StringComparison.OrdinalIgnoreCase))
+                        {
+                            tableName = field.GetValue(attr, null).ToString();
+                            return (tableName);
+                        }
+                    }
+                }
+
+            }
+            return (tableName);
+        }
+
         /// <summary>
         /// Creates a new SQLinq object for the Type of the object specified.
         /// </summary>
@@ -380,14 +409,7 @@ namespace SQLinq
             else
             {
                 // Get Table / View Name
-                var type = typeof(T);
-                tableName = type.Name;
-                var tableAttribute = type.GetCustomAttributes(typeof(SQLinqTableAttribute), false).FirstOrDefault() as SQLinqTableAttribute;
-                if (tableAttribute != null)
-                {
-                    // Table / View name is explicitly set, use that instead
-                    tableName = tableAttribute.Table;
-                }
+                tableName = SQLinq.GetTableName (typeof(T));
 
                 tableAsName = tableName;
                 //if (withAs)

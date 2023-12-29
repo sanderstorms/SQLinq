@@ -135,15 +135,7 @@ namespace SQLinq
             }
             else
             {
-                // Get Table / View Name
-                var type = this.Data.GetType();
-                tableName = type.Name;
-                var tableAttribute = type.GetCustomAttributes(typeof(SQLinqTableAttribute), false).FirstOrDefault() as SQLinqTableAttribute;
-                if (tableAttribute != null)
-                {
-                    // Table / View name is explicitly set, use that instead
-                    tableName = tableAttribute.Table;
-                }
+                tableName = SQLinq.GetTableName(Data.GetType());
             }
 
             return this.Dialect.ParseTableName(tableName);

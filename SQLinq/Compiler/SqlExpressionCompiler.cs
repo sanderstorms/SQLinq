@@ -306,15 +306,15 @@ namespace SQLinq.Compiler
                 {
                     case "startswith":
                         parameterName = parameterName.ToString() + "%";
-                        return string.Format("{0} LIKE {1}", memberName, parameterName);
+                        return string.Format("{0} LIKE '{1}'", memberName, parameterName);
 
                     case "endswith":
                         parameterName = "%" + parameterName.ToString();
-                        return string.Format("{0} LIKE {1}", memberName, parameterName);
+                        return string.Format("{0} LIKE '{1}'", memberName, parameterName);
 
                     case "contains":
                         parameterName = "%" + parameterName.ToString() + "%";
-                        return string.Format("{0} LIKE {1}", memberName, parameterName);
+                        return string.Format("{0} LIKE '{1}'", memberName, parameterName);
 
                     case "toupper":
                         return string.Format("UCASE({0})", memberName);
@@ -412,6 +412,23 @@ namespace SQLinq.Compiler
                     // Column name explicitly set, use that instead
                     retVal = columnAttribute.Column;
                 }
+            }
+            else
+            {
+                var attributes = p.GetCustomAttributes(false);
+                foreach (var attr in attributes)
+                {
+                    var fields = attr.GetType().GetProperties();
+                    foreach (var field in fields)
+                    {
+                        if (field.Name.Equals("name", StringComparison.OrdinalIgnoreCase))
+                        {
+                            retVal = field.GetValue(attr, null).ToString();
+                            return dialect.ParseColumnName(retVal);
+                        }
+                    }
+                }
+
             }
 
             return dialect.ParseColumnName(retVal);
